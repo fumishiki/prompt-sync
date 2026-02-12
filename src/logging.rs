@@ -27,38 +27,39 @@ pub(crate) struct OperationLog {
     log_path: std::path::PathBuf,
 }
 
+pub(crate) struct LogEntry<'a> {
+    pub action: Action,
+    pub source: &'a Path,
+    pub target: &'a Path,
+    pub status: &'a str,
+    pub error: Option<&'a str>,
+    pub hash_before: Option<&'a str>,
+    pub backup_location: Option<&'a Path>,
+}
+
 impl OperationLog {
     pub(crate) fn new(backup_dir: &Path) -> Self {
         let log_path = backup_dir.join(LOG_FILE_NAME);
         OperationLog { log_path }
     }
 
-    pub(crate) fn record(
-        &self,
-        action: Action,
-        source: &Path,
-        target: &Path,
-        status: &str,
-        error: Option<&str>,
-        hash_before: Option<&str>,
-        backup_location: Option<&Path>,
-    ) -> Result<()> {
+    pub(crate) fn record(&self, entry_data: LogEntry<'_>) -> Result<()> {
         let entry = json!({
             "timestamp": Utc::now().to_rfc3339(),
-            "action": action.as_str(),
-            "source": source.to_string_lossy(),
-            "target": target.to_string_lossy(),
-            "status": status,
-            "error": error,
-            "hash_before": hash_before,
-            "backup_location": backup_location.map(|p| p.to_string_lossy())
+            "action": entry_data.action.as_str(),
+            "source": entry_data.source.to_string_lossy(),
+            "target": entry_data.target.to_string_lossy(),
+            "status": entry_data.status,
+            "error": entry_data.error,
+            "hash_before": entry_data.hash_before,
+            "backup_location": entry_data.backup_location.map(|p| p.to_string_lossy())
         });
 
         // Check if we need to rotate the log
-        if let Ok(meta) = fs::metadata(&self.log_path) {
-            if meta.len() > LOG_SIZE_LIMIT {
-                self.rotate_log()?;
-            }
+        if let Ok(meta) = fs::metadata(&self.log_path)
+            && meta.len() > LOG_SIZE_LIMIT
+        {
+            self.rotate_log()?;
         }
 
         let log_contents = if self.log_path.exists() {

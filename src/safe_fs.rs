@@ -242,12 +242,11 @@ pub(crate) fn cleanup_old_backups(backup_dir: &Path, max_versions: usize) -> Res
         let path = entry.path();
         
         // Only process .bak files
-        if path.extension().map_or(false, |ext| ext == "bak") {
-            if let Ok(meta) = fs::metadata(&path) {
-                if let Ok(modified) = meta.modified() {
-                    backup_files.push((path, modified));
-                }
-            }
+        if path.extension().is_some_and(|ext| ext == "bak")
+            && let Ok(meta) = fs::metadata(&path)
+            && let Ok(modified) = meta.modified()
+        {
+            backup_files.push((path, modified));
         }
     }
     

@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use walkdir::WalkDir;
 
 use crate::config::ConfigFile;
-use crate::logging::{OperationLog, Action};
+use crate::logging::{self, OperationLog, Action};
 use crate::model::{Mapping, MappingKind, Record, Report, ResolveContext, Status};
 use crate::pathing::{hardlink_count, resolve_path, same_file};
 use crate::safe_fs::{
@@ -342,15 +342,15 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
     if let Err(err) = ensure_parent_dir(&mapping.target) {
         if let Some(backup_root) = backup_dir {
             let logger = OperationLog::new(backup_root);
-            let _ = logger.record(
-                Action::Replace,
-                &mapping.source,
-                &mapping.target,
-                "failed",
-                Some(&err.to_string()),
-                None,
-                None,
-            );
+            let _ = logger.record(logging::LogEntry {
+                action: Action::Replace,
+                source: &mapping.source,
+                target: &mapping.target,
+                status: "failed",
+                error: Some(&err.to_string()),
+                hash_before: None,
+                backup_location: None,
+            });
         }
         return Record {
             status: Status::Error,
@@ -371,15 +371,15 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
         Err(err) => {
             if let Some(backup_root) = backup_dir {
                 let logger = OperationLog::new(backup_root);
-                let _ = logger.record(
-                    Action::Replace,
-                    &mapping.source,
-                    &mapping.target,
-                    "failed",
-                    Some(&err.to_string()),
-                    hash_before.as_deref(),
-                    None,
-                );
+                let _ = logger.record(logging::LogEntry {
+                    action: Action::Replace,
+                    source: &mapping.source,
+                    target: &mapping.target,
+                    status: "failed",
+                    error: Some(&err.to_string()),
+                    hash_before: hash_before.as_deref(),
+                    backup_location: None,
+                });
             }
             return Record {
                 status: Status::Error,
@@ -392,15 +392,15 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
     if let Err(err) = create_hard_link_checked(&mapping.source, &mapping.target) {
         if let Some(backup_root) = backup_dir {
             let logger = OperationLog::new(backup_root);
-            let _ = logger.record(
-                Action::Replace,
-                &mapping.source,
-                &mapping.target,
-                "failed",
-                Some(&err.to_string()),
-                hash_before.as_deref(),
-                backup_outcome.backup_path.as_deref(),
-            );
+            let _ = logger.record(logging::LogEntry {
+                action: Action::Replace,
+                source: &mapping.source,
+                target: &mapping.target,
+                status: "failed",
+                error: Some(&err.to_string()),
+                hash_before: hash_before.as_deref(),
+                backup_location: backup_outcome.backup_path.as_deref(),
+            });
         }
         return Record {
             status: Status::Error,
@@ -412,15 +412,15 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
     // Log successful replacement
     if let Some(backup_root) = backup_dir {
         let logger = OperationLog::new(backup_root);
-        let _ = logger.record(
-            Action::Replace,
-            &mapping.source,
-            &mapping.target,
-            "success",
-            None,
-            hash_before.as_deref(),
-            backup_outcome.backup_path.as_deref(),
-        );
+        let _ = logger.record(logging::LogEntry {
+            action: Action::Replace,
+            source: &mapping.source,
+            target: &mapping.target,
+            status: "success",
+            error: None,
+            hash_before: hash_before.as_deref(),
+            backup_location: backup_outcome.backup_path.as_deref(),
+        });
     }
 
     Record {

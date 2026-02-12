@@ -526,8 +526,6 @@ prompt-sync verify
 
 ---
 
-**Made with ❤️ for AI-driven development teams.**
-
 ## License
 
 This project is dual-licensed under either of:
