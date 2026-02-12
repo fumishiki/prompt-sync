@@ -6,14 +6,11 @@ use anyhow::{Context, Result, anyhow};
 use walkdir::WalkDir;
 
 use crate::config::ConfigFile;
-use crate::logging::{self, OperationLog, Action};
+use crate::logging::{self, Action, OperationLog};
 use crate::model::{Mapping, MappingKind, Record, Report, ResolveContext, Status};
 use crate::pathing::{hardlink_count, resolve_path, same_file};
 use crate::safe_fs::{
-    calculate_sha256,
-    create_hard_link_checked,
-    ensure_parent_dir,
-    remove_existing_target_file,
+    calculate_sha256, create_hard_link_checked, ensure_parent_dir, remove_existing_target_file,
 };
 
 pub(crate) fn build_mappings(
@@ -132,7 +129,12 @@ pub(crate) fn apply_link(
     }
 }
 
-pub(crate) fn apply_repair(mapping: &Mapping, force_conflict: bool, dry_run: bool, backup_dir: Option<&std::path::Path>) -> Record {
+pub(crate) fn apply_repair(
+    mapping: &Mapping,
+    force_conflict: bool,
+    dry_run: bool,
+    backup_dir: Option<&std::path::Path>,
+) -> Record {
     let current = inspect_mapping(mapping);
 
     match current.status {

@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
-use sha2::{Digest, Sha256};
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -53,9 +53,7 @@ pub(crate) struct BackupOutcome {
 
 impl BackupOutcome {
     pub(crate) const fn none() -> Self {
-        Self {
-            backup_path: None,
-        }
+        Self { backup_path: None }
     }
 }
 
@@ -94,7 +92,10 @@ fn backup_target_file(target: &Path, backup_root: &Path, file_size: u64) -> Resu
     check_disk_space(backup_root, file_size)?;
 
     fs::create_dir_all(backup_root).with_context(|| {
-        format!("failed to create backup directory {}", backup_root.display())
+        format!(
+            "failed to create backup directory {}",
+            backup_root.display()
+        )
     })?;
 
     let backup_path = build_backup_path(backup_root, target);
@@ -125,7 +126,11 @@ fn build_backup_path(backup_root: &Path, target: &Path) -> PathBuf {
     backup_root.join(format!("{}-{}", ts, file_name))
 }
 
-fn finalize_backup(backup_root: &Path, backup_path: PathBuf, file_size: u64) -> Result<BackupOutcome> {
+fn finalize_backup(
+    backup_root: &Path,
+    backup_path: PathBuf,
+    file_size: u64,
+) -> Result<BackupOutcome> {
     if let Ok(hash) = calculate_sha256(&backup_path) {
         let _ = save_hash_metadata(&backup_path, &hash, file_size);
     }
@@ -176,19 +181,24 @@ pub(crate) fn calculate_sha256(path: &Path) -> Result<String> {
 }
 
 pub(crate) fn save_hash_metadata(backup_path: &Path, hash: &str, file_size: u64) -> Result<()> {
-    let hash_path = backup_path.with_extension(format!("{}.sha256", 
-        backup_path.extension().map(|e| e.to_string_lossy()).unwrap_or_default()));
-    
+    let hash_path = backup_path.with_extension(format!(
+        "{}.sha256",
+        backup_path
+            .extension()
+            .map(|e| e.to_string_lossy())
+            .unwrap_or_default()
+    ));
+
     let metadata = format!(
         "algorithm=sha256\nhash={}\nsize={}\ntimestamp={}\n",
         hash,
         file_size,
         Utc::now().to_rfc3339()
     );
-    
+
     fs::write(&hash_path, metadata)
         .with_context(|| format!("failed to write hash metadata to {}", hash_path.display()))?;
-    
+
     Ok(())
 }
 
@@ -196,21 +206,24 @@ pub(crate) fn save_hash_metadata(backup_path: &Path, hash: &str, file_size: u64)
 #[cfg(unix)]
 pub(crate) fn check_disk_space(path: &Path, required_bytes: u64) -> Result<()> {
     use std::ffi::CString;
-    
+
     let target_parent = path.parent().unwrap_or_else(|| Path::new("."));
     let path_cstr = CString::new(target_parent.to_string_lossy().as_bytes())
         .map_err(|_| anyhow!("invalid path for disk space check"))?;
-    
+
     let stat = unsafe {
         let mut stat_buf = std::mem::MaybeUninit::uninit();
         if libc::statfs(path_cstr.as_ptr(), stat_buf.as_mut_ptr()) != 0 {
-            return Err(anyhow!("failed to check disk space for {}", target_parent.display()));
+            return Err(anyhow!(
+                "failed to check disk space for {}",
+                target_parent.display()
+            ));
         }
         stat_buf.assume_init()
     };
-    
+
     let available_bytes = (stat.f_bavail as u64) * (stat.f_bsize as u64);
-    
+
     if available_bytes < required_bytes {
         return Err(anyhow!(
             "insufficient disk space: required={} bytes, available={} bytes",
@@ -218,7 +231,7 @@ pub(crate) fn check_disk_space(path: &Path, required_bytes: u64) -> Result<()> {
             available_bytes
         ));
     }
-    
+
     Ok(())
 }
 
@@ -233,14 +246,15 @@ pub(crate) fn cleanup_old_backups(backup_dir: &Path, max_versions: usize) -> Res
     if !backup_dir.exists() {
         return Ok(());
     }
-    
+
     let mut backup_files = Vec::new();
-    
+
     for entry in fs::read_dir(backup_dir)
-        .with_context(|| format!("failed to read backup directory {}", backup_dir.display()))? {
+        .with_context(|| format!("failed to read backup directory {}", backup_dir.display()))?
+    {
         let entry = entry?;
         let path = entry.path();
-        
+
         // Only process .bak files
         if path.extension().is_some_and(|ext| ext == "bak")
             && let Ok(meta) = fs::metadata(&path)
@@ -249,22 +263,26 @@ pub(crate) fn cleanup_old_backups(backup_dir: &Path, max_versions: usize) -> Res
             backup_files.push((path, modified));
         }
     }
-    
+
     if backup_files.len() > max_versions {
         // Sort by modification time (oldest first)
         backup_files.sort_by(|a, b| a.1.cmp(&b.1));
-        
+
         let to_remove = backup_files.len() - max_versions;
         for (path, _) in backup_files.iter().take(to_remove) {
             // Remove the backup file
             let _ = fs::remove_file(path);
-            
+
             // Also remove associated .sha256 file if exists
-            let sha256_path = path.with_extension(format!("{}.sha256", 
-                path.extension().map(|e| e.to_string_lossy()).unwrap_or_default()));
+            let sha256_path = path.with_extension(format!(
+                "{}.sha256",
+                path.extension()
+                    .map(|e| e.to_string_lossy())
+                    .unwrap_or_default()
+            ));
             let _ = fs::remove_file(sha256_path);
         }
     }
-    
+
     Ok(())
 }

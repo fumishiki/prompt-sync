@@ -1,8 +1,8 @@
+use anyhow::{Context, Result};
+use chrono::Utc;
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
-use chrono::Utc;
-use serde_json::{json, Value};
-use anyhow::{Context, Result};
 
 const LOG_FILE_NAME: &str = ".operations.log";
 const LOG_SIZE_LIMIT: u64 = 1024 * 1024; // 1MB
@@ -63,21 +63,20 @@ impl OperationLog {
         }
 
         let log_contents = if self.log_path.exists() {
-            fs::read_to_string(&self.log_path)
-                .unwrap_or_else(|_| String::from("[]"))
+            fs::read_to_string(&self.log_path).unwrap_or_else(|_| String::from("[]"))
         } else {
             String::from("[]")
         };
 
         // Parse as JSON array
-        let mut entries: Vec<Value> = serde_json::from_str(&log_contents)
-            .unwrap_or_else(|_| Vec::new());
+        let mut entries: Vec<Value> =
+            serde_json::from_str(&log_contents).unwrap_or_else(|_| Vec::new());
 
         entries.push(entry);
 
         // Write back
-        let json_str = serde_json::to_string_pretty(&entries)
-            .context("failed to serialize log entries")?;
+        let json_str =
+            serde_json::to_string_pretty(&entries).context("failed to serialize log entries")?;
 
         fs::write(&self.log_path, json_str)
             .with_context(|| format!("failed to write log to {}", self.log_path.display()))?;

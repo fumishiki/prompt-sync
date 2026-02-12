@@ -29,7 +29,9 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
             let mappings = build_mappings(&config, &ctx, cli.verbose)?;
             let records = mappings
                 .iter()
-                .map(|mapping| apply_link(mapping, force, only_missing, dry_run, backup_dir.as_deref()))
+                .map(|mapping| {
+                    apply_link(mapping, force, only_missing, dry_run, backup_dir.as_deref())
+                })
                 .collect::<Vec<_>>();
             let report = Report {
                 command: "link".to_owned(),
