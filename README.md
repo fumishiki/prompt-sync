@@ -526,51 +526,6 @@ prompt-sync verify
 
 ---
 
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-Built for teams managing AI instructions across multiple tools:
-- Supports Claude, Copilot, Gemini, CodeX, and more
-- Designed with production reliability in mind
-- Tested with real-world scenarios
-
----
-
-## 💡 Best Practices
-
-### 1. Start with Bootstrap
-```bash
-prompt-sync bootstrap --write-config
-```
-
-### 2. Test with Dry-Run
-```bash
-prompt-sync link --dry-run
-```
-
-### 3. Enable Backups
-```bash
-prompt-sync link --force --backup-dir ~/.prompt-sync/backups
-```
-
-### 4. Monitor Link Health
-```bash
-# Add to CI/CD
-prompt-sync verify || exit 1
-```
-
-### 5. Automate Cleanup
-```bash
-prompt-sync install-commit-guard --repo .
-```
-
----
-
 **Made with ❤️ for AI-driven development teams.**
 
 ## License
@@ -585,4 +540,5 @@ at your option.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
 
