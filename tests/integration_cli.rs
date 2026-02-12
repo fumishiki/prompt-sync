@@ -271,13 +271,17 @@ fn install_commit_guard_refuses_overwrite_without_force() -> anyhow::Result<()> 
 }
 
 fn write_config(root: &Path, source: &Path, target: &Path) -> anyhow::Result<()> {
+    // Convert paths to string, replacing backslashes with forward slashes for TOML compatibility
+    let source_str = source.display().to_string().replace('\\', "/");
+    let target_str = target.display().to_string().replace('\\', "/");
+    
     let config = format!(
         r#"[[links]]
 source = "{}"
 targets = ["{}"]
 "#,
-        source.display(),
-        target.display()
+        source_str,
+        target_str
     );
     fs::write(root.join("prompt-sync.toml"), config)?;
     Ok(())
