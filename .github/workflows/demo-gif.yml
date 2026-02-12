@@ -1,0 +1,55 @@
+name: Refresh Demo GIF
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "demo/**"
+      - "scripts/generate_demo_gif.sh"
+      - "scripts/prepare_demo_env.sh"
+      - ".github/workflows/demo-gif.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  demo-gif:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Prepare demo workspace
+        run: ./scripts/prepare_demo_env.sh
+
+      - name: Render demo GIF
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/skillslink.tape
+
+      - name: Detect GIF changes
+        id: changes
+        run: |
+          if git diff --quiet -- assets/skillslink-demo.gif; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit updated GIF
+        if: steps.changes.outputs.changed == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: refresh demo gif"
+          file_pattern: assets/skillslink-demo.gif

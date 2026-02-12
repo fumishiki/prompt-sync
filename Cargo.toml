@@ -1,0 +1,22 @@
+[package]
+name = "prompt-sync"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Hardlink manager for AI instruction/skills files with enterprise-grade safety features"
+repository = "https://github.com/pikafumi/prompt-sync"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"
+walkdir = "2.5"
+
+[dev-dependencies]
+tempfile = "3.14"

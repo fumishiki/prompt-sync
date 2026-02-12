@@ -1,0 +1,102 @@
+use std::fs;
+use std::path::Path;
+use chrono::Utc;
+use serde_json::{json, Value};
+use anyhow::{Context, Result};
+
+const LOG_FILE_NAME: &str = ".operations.log";
+const LOG_SIZE_LIMIT: u64 = 1024 * 1024; // 1MB
+
+#[derive(Debug, Clone)]
+pub(crate) enum Action {
+    Replace,
+    #[allow(dead_code)]
+    Backup,
+}
+
+impl Action {
+    fn as_str(&self) -> &str {
+        match self {
+            Action::Replace => "replace",
+            Action::Backup => "backup",
+        }
+    }
+}
+
+pub(crate) struct OperationLog {
+    log_path: std::path::PathBuf,
+}
+
+impl OperationLog {
+    pub(crate) fn new(backup_dir: &Path) -> Self {
+        let log_path = backup_dir.join(LOG_FILE_NAME);
+        OperationLog { log_path }
+    }
+
+    pub(crate) fn record(
+        &self,
+        action: Action,
+        source: &Path,
+        target: &Path,
+        status: &str,
+        error: Option<&str>,
+        hash_before: Option<&str>,
+        backup_location: Option<&Path>,
+    ) -> Result<()> {
+        let entry = json!({
+            "timestamp": Utc::now().to_rfc3339(),
+            "action": action.as_str(),
+            "source": source.to_string_lossy(),
+            "target": target.to_string_lossy(),
+            "status": status,
+            "error": error,
+            "hash_before": hash_before,
+            "backup_location": backup_location.map(|p| p.to_string_lossy())
+        });
+
+        // Check if we need to rotate the log
+        if let Ok(meta) = fs::metadata(&self.log_path) {
+            if meta.len() > LOG_SIZE_LIMIT {
+                self.rotate_log()?;
+            }
+        }
+
+        let log_contents = if self.log_path.exists() {
+            fs::read_to_string(&self.log_path)
+                .unwrap_or_else(|_| String::from("[]"))
+        } else {
+            String::from("[]")
+        };
+
+        // Parse as JSON array
+        let mut entries: Vec<Value> = serde_json::from_str(&log_contents)
+            .unwrap_or_else(|_| Vec::new());
+
+        entries.push(entry);
+
+        // Write back
+        let json_str = serde_json::to_string_pretty(&entries)
+            .context("failed to serialize log entries")?;
+
+        fs::write(&self.log_path, json_str)
+            .with_context(|| format!("failed to write log to {}", self.log_path.display()))?;
+
+        Ok(())
+    }
+
+    fn rotate_log(&self) -> Result<()> {
+        let rotated_path = self.log_path.with_extension("log.1");
+
+        // If rotated file exists, remove it
+        if rotated_path.exists() {
+            fs::remove_file(&rotated_path)?;
+        }
+
+        // Rename current log to .1
+        if self.log_path.exists() {
+            fs::rename(&self.log_path, &rotated_path)?;
+        }
+
+        Ok(())
+    }
+}

@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Env
+.env
+.env.*
+
+# Build
+dist/
+build/
+target/
+node_modules/
+
+# Local generated working directories
+.tmp*/
+
+# Local docs workspace (do not track files under docs/)
+docs/
+assets/skillslink-demo.gif
