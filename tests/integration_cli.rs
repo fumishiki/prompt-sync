@@ -321,6 +321,164 @@ target_roots = ["{}"]
     Ok(())
 }
 
+#[test]
+fn link_skills_sets_exclude_filters_files() -> anyhow::Result<()> {
+    let temp = TempDir::new()?;
+    let source_root = temp.path().join("skills");
+
+    // Create skill with references/ subdir that should be excluded
+    let skill_dir = source_root.join("my-skill");
+    fs::create_dir_all(skill_dir.join("references"))?;
+    fs::write(skill_dir.join("SKILL.md"), "skill content")?;
+    fs::write(skill_dir.join("references").join("ref.md"), "ref content")?;
+
+    // Create another skill without references
+    let skill2_dir = source_root.join("other-skill");
+    fs::create_dir_all(&skill2_dir)?;
+    fs::write(skill2_dir.join("SKILL.md"), "other content")?;
+
+    let target_root = temp.path().join("target");
+    let source_str = source_root.display().to_string().replace('\\', "/");
+    let target_str = target_root.display().to_string().replace('\\', "/");
+
+    let config = format!(
+        r#"[[skills_sets]]
+source_root = "{}"
+target_roots = ["{}"]
+exclude = ["*/references/**"]
+"#,
+        source_str, target_str
+    );
+    fs::write(temp.path().join("prompt-sync.toml"), config)?;
+
+    let link_code = run(Cli {
+        config: temp.path().join("prompt-sync.toml"),
+        verbose: false,
+        command: Command::Link {
+            only_missing: false,
+            force: false,
+            dry_run: false,
+            json: false,
+            backup_dir: None,
+        },
+    })?;
+    assert_eq!(link_code, 0);
+
+    // SKILL.md files should be linked
+    assert!(target_root.join("my-skill").join("SKILL.md").exists());
+    assert!(target_root.join("other-skill").join("SKILL.md").exists());
+
+    // references/ should be excluded
+    assert!(
+        !target_root
+            .join("my-skill")
+            .join("references")
+            .join("ref.md")
+            .exists(),
+        "references/ref.md should be excluded"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn link_skills_sets_only_skills_filters_dirs() -> anyhow::Result<()> {
+    let temp = TempDir::new()?;
+    let source_root = temp.path().join("skills");
+
+    // Create three skills
+    for name in &["alpha", "beta", "gamma"] {
+        let dir = source_root.join(name);
+        fs::create_dir_all(&dir)?;
+        fs::write(dir.join("SKILL.md"), format!("{name} content"))?;
+    }
+
+    let target_root = temp.path().join("target");
+    let source_str = source_root.display().to_string().replace('\\', "/");
+    let target_str = target_root.display().to_string().replace('\\', "/");
+
+    let config = format!(
+        r#"[[skills_sets]]
+source_root = "{}"
+target_roots = ["{}"]
+only_skills = ["alpha", "gamma"]
+"#,
+        source_str, target_str
+    );
+    fs::write(temp.path().join("prompt-sync.toml"), config)?;
+
+    let link_code = run(Cli {
+        config: temp.path().join("prompt-sync.toml"),
+        verbose: false,
+        command: Command::Link {
+            only_missing: false,
+            force: false,
+            dry_run: false,
+            json: false,
+            backup_dir: None,
+        },
+    })?;
+    assert_eq!(link_code, 0);
+
+    assert!(target_root.join("alpha").join("SKILL.md").exists());
+    assert!(target_root.join("gamma").join("SKILL.md").exists());
+    assert!(
+        !target_root.join("beta").join("SKILL.md").exists(),
+        "beta should be excluded by only_skills"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn link_skills_sets_exclude_skills_filters_dirs() -> anyhow::Result<()> {
+    let temp = TempDir::new()?;
+    let source_root = temp.path().join("skills");
+
+    // Create three skills
+    for name in &["alpha", "beta", "gamma"] {
+        let dir = source_root.join(name);
+        fs::create_dir_all(&dir)?;
+        fs::write(dir.join("SKILL.md"), format!("{name} content"))?;
+    }
+
+    let target_root = temp.path().join("target");
+    let source_str = source_root.display().to_string().replace('\\', "/");
+    let target_str = target_root.display().to_string().replace('\\', "/");
+
+    let config = format!(
+        r#"[[skills_sets]]
+source_root = "{}"
+target_roots = ["{}"]
+exclude_skills = ["beta"]
+"#,
+        source_str, target_str
+    );
+    fs::write(temp.path().join("prompt-sync.toml"), config)?;
+
+    let link_code = run(Cli {
+        config: temp.path().join("prompt-sync.toml"),
+        verbose: false,
+        command: Command::Link {
+            only_missing: false,
+            force: false,
+            dry_run: false,
+            json: false,
+            backup_dir: None,
+        },
+    })?;
+    assert_eq!(link_code, 0);
+
+    assert!(target_root.join("alpha").join("SKILL.md").exists());
+    assert!(target_root.join("gamma").join("SKILL.md").exists());
+    assert!(
+        !target_root.join("beta").join("SKILL.md").exists(),
+        "beta should be excluded by exclude_skills"
+    );
+
+    Ok(())
+}
+
 fn write_config(root: &Path, source: &Path, target: &Path) -> anyhow::Result<()> {
     // Convert paths to string, replacing backslashes with forward slashes for TOML compatibility
     let source_str = source.display().to_string().replace('\\', "/");

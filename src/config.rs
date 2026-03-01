@@ -37,6 +37,12 @@ pub(crate) struct SkillsSet {
     pub(crate) source_root: String,
     #[serde(default)]
     pub(crate) target_roots: Vec<String>,
+    #[serde(default)]
+    pub(crate) exclude: Vec<String>,
+    #[serde(default)]
+    pub(crate) only_skills: Vec<String>,
+    #[serde(default)]
+    pub(crate) exclude_skills: Vec<String>,
 }
 
 pub(crate) fn load_config(config_path: &Path) -> Result<(ConfigFile, ResolveContext)> {
@@ -82,6 +88,9 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
         skills_sets.push(SkillsSet {
             source_root: "~/.agents/skills".to_owned(),
             target_roots,
+            exclude: Vec::new(),
+            only_skills: Vec::new(),
+            exclude_skills: Vec::new(),
         });
     }
 
@@ -93,6 +102,9 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
         skills_sets.push(SkillsSet {
             source_root: "~/.codex/skills".to_owned(),
             target_roots: legacy_targets,
+            exclude: vec!["*/.system/**".to_owned()],
+            only_skills: Vec::new(),
+            exclude_skills: Vec::new(),
         });
     }
 
@@ -156,10 +168,16 @@ pub(crate) fn build_bootstrap_config() -> ConfigFile {
                     "<repo>/.gemini/skills".to_owned(),
                     "<repo>/.agents/skills".to_owned(),
                 ],
+                exclude: Vec::new(),
+                only_skills: Vec::new(),
+                exclude_skills: Vec::new(),
             },
             SkillsSet {
                 source_root: "~/.codex/skills".to_owned(),
                 target_roots: vec!["~/.claude/skills".to_owned()],
+                exclude: vec!["*/.system/**".to_owned()],
+                only_skills: Vec::new(),
+                exclude_skills: Vec::new(),
             },
         ],
     }

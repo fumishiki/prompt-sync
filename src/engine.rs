@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use walkdir::WalkDir;
 
 use crate::config::ConfigFile;
@@ -53,6 +54,8 @@ pub(crate) fn build_mappings(
             ));
         }
 
+        let exclude_globs = build_glob_set(&set.exclude)?;
+
         for entry_result in WalkDir::new(&source_root) {
             let entry = entry_result.with_context(|| {
                 format!("failed to walk source_root: {}", source_root.display())
@@ -69,6 +72,25 @@ pub(crate) fn build_mappings(
                     source_root.display()
                 )
             })?;
+
+            // Skill name filter (first path component = skill directory name)
+            if let Some(skill_name) = extract_skill_name(rel) {
+                if !set.only_skills.is_empty() {
+                    if !set.only_skills.iter().any(|s| s == skill_name) {
+                        continue;
+                    }
+                } else if !set.exclude_skills.is_empty()
+                    && set.exclude_skills.iter().any(|s| s == skill_name)
+                {
+                    continue;
+                }
+            }
+
+            // Exclude glob filter
+            let rel_str = rel.to_string_lossy();
+            if exclude_globs.is_match(rel_str.as_ref()) {
+                continue;
+            }
 
             for target_root_raw in &set.target_roots {
                 let target_root = resolve_path(target_root_raw, ctx);
@@ -430,6 +452,20 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
         message: Some("replaced target with hardlink".to_owned()),
         ..base
     }
+}
+
+fn build_glob_set(patterns: &[String]) -> Result<GlobSet> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        let glob = Glob::new(pattern)
+            .with_context(|| format!("invalid exclude glob pattern: {pattern}"))?;
+        builder.add(glob);
+    }
+    builder.build().context("failed to build glob set")
+}
+
+fn extract_skill_name(rel: &Path) -> Option<&str> {
+    rel.components().next().and_then(|c| c.as_os_str().to_str())
 }
 
 fn base_record(mapping: &Mapping) -> Record {

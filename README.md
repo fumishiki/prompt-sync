@@ -148,11 +148,47 @@ target_roots = [
   "~/.gemini/skills",
   "~/.codex/skills",
 ]
+exclude = ["*/.system/**"]  # Glob patterns to exclude files
 ```
 
 ### Copilot Prompts & Instructions
 
 Copilot does not use a skills directory. Instead, it reads `.github/prompts/*.prompt.md` and `.github/instructions/*.instructions.md`. You can manage these files via additional `skills_sets` entries with `mapping_kind` set to the appropriate variant (`PromptFile` or `InstructionFile`), or by adding them as individual `[[links]]` entries.
+
+### Filtering Skills
+
+Control which skills and files are synchronized using filter fields in `skills_sets`:
+
+#### `exclude` — Glob Pattern Filter
+
+Exclude files matching glob patterns (matched against relative paths from `source_root`):
+
+```toml
+[[skills_sets]]
+source_root = "~/.agents/skills"
+target_roots = ["~/.claude/skills", "~/.gemini/skills"]
+exclude = ["*/.system/**", "*/test-data/**"]
+```
+
+#### `only_skills` / `exclude_skills` — Skill-Level Filter
+
+Filter entire skills (top-level directories under `source_root`) by name:
+
+```toml
+# Whitelist: only sync these skills
+[[skills_sets]]
+source_root = "~/.agents/skills"
+target_roots = ["~/.claude/skills"]
+only_skills = ["dev-process", "rust-stack", "python-stack"]
+
+# Blacklist: sync all except these skills
+[[skills_sets]]
+source_root = "~/.codex/skills"
+target_roots = ["~/.claude/skills"]
+exclude_skills = ["atlas", "deprecated-skill"]
+```
+
+**Filter priority:** When `only_skills` is non-empty, `exclude_skills` is ignored. Filter order: skill name filter -> exclude glob filter -> mapping added.
 
 ### Advanced: Backup Configuration
 
