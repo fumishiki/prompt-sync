@@ -159,9 +159,7 @@ pub(crate) fn build_bootstrap_config() -> ConfigFile {
             },
             SkillsSet {
                 source_root: "~/.codex/skills".to_owned(),
-                target_roots: vec![
-                    "~/.claude/skills".to_owned(),
-                ],
+                target_roots: vec!["~/.claude/skills".to_owned()],
             },
         ],
     }
