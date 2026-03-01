@@ -73,9 +73,8 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
     if profile_set.contains(&Profile::Gemini) {
         target_roots.push("~/.gemini/skills".to_owned());
     }
-    if profile_set.contains(&Profile::Copilot) {
-        target_roots.push("~/.copilot/skills".to_owned());
-        target_roots.push("<repo>/.github/skills".to_owned());
+    if profile_set.contains(&Profile::Codex) {
+        target_roots.push("~/.codex/skills".to_owned());
     }
 
     let mut skills_sets = Vec::new();
@@ -89,9 +88,6 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
     let mut legacy_targets = Vec::new();
     if profile_set.contains(&Profile::Claude) {
         legacy_targets.push("~/.claude/skills".to_owned());
-    }
-    if profile_set.contains(&Profile::Gemini) {
-        legacy_targets.push("~/.gemini/skills".to_owned());
     }
     if !legacy_targets.is_empty() {
         skills_sets.push(SkillsSet {
@@ -155,19 +151,16 @@ pub(crate) fn build_bootstrap_config() -> ConfigFile {
                 target_roots: vec![
                     "~/.claude/skills".to_owned(),
                     "~/.gemini/skills".to_owned(),
-                    "~/.copilot/skills".to_owned(),
-                    "<repo>/.github/skills".to_owned(),
+                    "~/.codex/skills".to_owned(),
                     "<repo>/.claude/skills".to_owned(),
                     "<repo>/.gemini/skills".to_owned(),
+                    "<repo>/.agents/skills".to_owned(),
                 ],
             },
             SkillsSet {
                 source_root: "~/.codex/skills".to_owned(),
                 target_roots: vec![
                     "~/.claude/skills".to_owned(),
-                    "~/.gemini/skills".to_owned(),
-                    "~/.copilot/skills".to_owned(),
-                    "<repo>/.github/skills".to_owned(),
                 ],
             },
         ],

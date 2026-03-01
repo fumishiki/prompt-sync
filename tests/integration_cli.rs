@@ -270,6 +270,57 @@ fn install_commit_guard_refuses_overwrite_without_force() -> anyhow::Result<()> 
     Ok(())
 }
 
+#[test]
+fn link_skills_sets_creates_hardlinks() -> anyhow::Result<()> {
+    let temp = TempDir::new()?;
+    let source_root = temp.path().join("skills");
+    let skill_dir = source_root.join("my-skill");
+    fs::create_dir_all(&skill_dir)?;
+    let source_file = skill_dir.join("SKILL.md");
+    fs::write(&source_file, "skill content")?;
+
+    let target_root = temp.path().join("target");
+
+    let source_str = source_root.display().to_string().replace('\\', "/");
+    let target_str = target_root.display().to_string().replace('\\', "/");
+
+    let config = format!(
+        r#"[[skills_sets]]
+source_root = "{}"
+target_roots = ["{}"]
+"#,
+        source_str, target_str
+    );
+    fs::write(temp.path().join("prompt-sync.toml"), config)?;
+
+    let link_code = run(Cli {
+        config: temp.path().join("prompt-sync.toml"),
+        verbose: false,
+        command: Command::Link {
+            only_missing: false,
+            force: false,
+            dry_run: false,
+            json: false,
+            backup_dir: None,
+        },
+    })?;
+    assert_eq!(link_code, 0);
+
+    let target_file = target_root.join("my-skill").join("SKILL.md");
+    assert!(target_file.exists(), "target skill file should exist");
+    assert_eq!(fs::read_to_string(&target_file)?, "skill content");
+
+    #[cfg(unix)]
+    {
+        let source_meta = fs::metadata(&source_file)?;
+        let target_meta = fs::metadata(&target_file)?;
+        assert_eq!(source_meta.ino(), target_meta.ino());
+        assert_eq!(source_meta.dev(), target_meta.dev());
+    }
+
+    Ok(())
+}
+
 fn write_config(root: &Path, source: &Path, target: &Path) -> anyhow::Result<()> {
     // Convert paths to string, replacing backslashes with forward slashes for TOML compatibility
     let source_str = source.display().to_string().replace('\\', "/");

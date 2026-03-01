@@ -4,9 +4,14 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum MappingKind {
     ConfigFile,
     SkillFile,
+    #[allow(dead_code)]
+    PromptFile,
+    #[allow(dead_code)]
+    InstructionFile,
 }
 
 #[derive(Debug, Clone)]

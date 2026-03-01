@@ -13,7 +13,7 @@
 
 ## 🎯 The Problem
 
-When working with multiple AI coding tools (Claude, Copilot, Gemini, CodeX, etc.), teams face critical issues:
+When working with multiple AI coding tools (Claude, Copilot, Gemini, Codex, etc.), teams face critical issues:
 
 | Issue | Impact | prompt-sync Solution |
 |-------|--------|-------------------|
@@ -140,16 +140,19 @@ targets = [
   "<repo>/.github/copilot-instructions.md",
 ]
 
-# Skill files synchronized in bulk
+# Skills synchronized across Claude/Gemini/Codex
 [[skills_sets]]
 source_root = "~/.agents/skills"
 target_roots = [
   "~/.claude/skills",
   "~/.gemini/skills",
-  "~/.copilot/skills",
-  "<repo>/.github/skills",
+  "~/.codex/skills",
 ]
 ```
+
+### Copilot Prompts & Instructions
+
+Copilot does not use a skills directory. Instead, it reads `.github/prompts/*.prompt.md` and `.github/instructions/*.instructions.md`. You can manage these files via additional `skills_sets` entries with `mapping_kind` set to the appropriate variant (`PromptFile` or `InstructionFile`), or by adding them as individual `[[links]]` entries.
 
 ### Advanced: Backup Configuration
 
