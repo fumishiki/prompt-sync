@@ -235,7 +235,7 @@ fn install_commit_guard_creates_hook() -> anyhow::Result<()> {
     let hook_path = repo.join(".git").join("hooks").join("commit-msg");
     let hook_body = fs::read_to_string(&hook_path)?;
     assert!(hook_body.contains("Co-authored-by"));
-    assert!(hook_body.contains("chatgpt|claude|codex|gemini|copilot|openai|anthropic"));
+    assert!(hook_body.contains("chatgpt|claude|codex|gemini|copilot|kiro|openai|anthropic"));
 
     #[cfg(unix)]
     {

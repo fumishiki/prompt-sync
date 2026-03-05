@@ -132,6 +132,7 @@ fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i
             Profile::Claude,
             Profile::Gemini,
             Profile::Copilot,
+            Profile::Kiro,
         ]
     } else {
         profiles

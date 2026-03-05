@@ -16,8 +16,8 @@ fi
 
 # Remove AI attribution lines automatically.
 tmp_file="$(mktemp)"
-grep -Eiv '^Co-authored-by:.*(chatgpt|claude|codex|gemini|copilot|openai|anthropic)' "$msg_file" \
-  | grep -Eiv 'generated with.*(chatgpt|claude|codex|gemini|copilot|openai|anthropic)' \
+grep -Eiv '^Co-authored-by:.*(chatgpt|claude|codex|gemini|copilot|kiro|openai|anthropic)' "$msg_file" \
+  | grep -Eiv 'generated with.*(chatgpt|claude|codex|gemini|copilot|kiro|openai|anthropic)' \
   > "$tmp_file" || true
 cat "$tmp_file" > "$msg_file"
 rm -f "$tmp_file"

@@ -71,6 +71,9 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
     if profile_set.contains(&Profile::Copilot) {
         link_targets.push("<repo>/.github/copilot-instructions.md".to_owned());
     }
+    if profile_set.contains(&Profile::Kiro) {
+        link_targets.push("~/.kiro/steering/master.md".to_owned());
+    }
 
     let mut target_roots = Vec::new();
     if profile_set.contains(&Profile::Claude) {
@@ -81,6 +84,9 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
     }
     if profile_set.contains(&Profile::Codex) {
         target_roots.push("~/.codex/skills".to_owned());
+    }
+    if profile_set.contains(&Profile::Kiro) {
+        target_roots.push("~/.kiro/steering".to_owned());
     }
 
     let mut skills_sets = Vec::new();
@@ -155,6 +161,7 @@ pub(crate) fn build_bootstrap_config() -> ConfigFile {
                 "<repo>/CLAUDE.md".to_owned(),
                 "<repo>/GEMINI.md".to_owned(),
                 "<repo>/.github/copilot-instructions.md".to_owned(),
+                "~/.kiro/steering/master.md".to_owned(),
             ],
         }],
         skills_sets: vec![
@@ -167,6 +174,7 @@ pub(crate) fn build_bootstrap_config() -> ConfigFile {
                     "<repo>/.claude/skills".to_owned(),
                     "<repo>/.gemini/skills".to_owned(),
                     "<repo>/.agents/skills".to_owned(),
+                    "~/.kiro/steering".to_owned(),
                 ],
                 exclude: Vec::new(),
                 only_skills: Vec::new(),

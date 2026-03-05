@@ -132,4 +132,5 @@ pub enum Profile {
     Claude,
     Gemini,
     Copilot,
+    Kiro,
 }

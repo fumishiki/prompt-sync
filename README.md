@@ -13,11 +13,11 @@
 
 ## 🎯 The Problem
 
-When working with multiple AI coding tools (Claude, Copilot, Gemini, Codex, etc.), teams face critical issues:
+When working with multiple AI coding tools (Claude, Copilot, Gemini, Codex, Kiro, etc.), teams face critical issues:
 
 | Issue | Impact | prompt-sync Solution |
 |-------|--------|-------------------|
-| **Instruction Drift** | Different `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` get out of sync | Hard-link synchronization |
+| **Instruction Drift** | Different `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, Kiro steering get out of sync | Hard-link synchronization |
 | **Commit Noise** | AI tool signatures pollute git history | Auto-removal commit hook |
 | **No Single Source** | Manual updates across multiple locations | Centralized config + auto-sync |
 
@@ -138,15 +138,17 @@ targets = [
   "~/.claude/CLAUDE.md",
   "~/.gemini/GEMINI.md",
   "<repo>/.github/copilot-instructions.md",
+  "~/.kiro/steering/master.md",
 ]
 
-# Skills synchronized across Claude/Gemini/Codex
+# Skills synchronized across Claude/Gemini/Codex/Kiro
 [[skills_sets]]
 source_root = "~/.agents/skills"
 target_roots = [
   "~/.claude/skills",
   "~/.gemini/skills",
   "~/.codex/skills",
+  "~/.kiro/steering",
 ]
 exclude = ["*/.system/**"]  # Glob patterns to exclude files
 ```
