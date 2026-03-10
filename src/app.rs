@@ -10,6 +10,7 @@ use crate::config::{
 use crate::engine::{apply_link, apply_repair, build_mappings, inspect_mapping, print_report};
 use crate::model::{Report, ResolveContext, Summary};
 use crate::pathing::{absolute_path, resolve_path};
+use crate::safe_fs::ensure_parent_dir;
 use crate::vcs::install_commit_guard;
 
 pub(crate) fn run(cli: Cli) -> Result<i32> {
@@ -26,30 +27,23 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
         } => {
             let (config, ctx) = load_config(&config_path)?;
             let backup_dir = resolve_backup_dir(backup_dir.as_deref())?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings
+            let records = build_mappings(&config, &ctx, cli.verbose)?
                 .iter()
                 .map(|mapping| {
                     apply_link(mapping, force, only_missing, dry_run, backup_dir.as_deref())
                 })
                 .collect::<Vec<_>>();
-            let report = Report {
-                command: "link".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
+            let report = Report::new("link", records);
             print_report(&report, json, cli.verbose)?;
             Ok(exit_code(&report.summary, false))
         }
         Command::Verify { json } => {
             let (config, ctx) = load_config(&config_path)?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings.iter().map(inspect_mapping).collect::<Vec<_>>();
-            let report = Report {
-                command: "verify".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
+            let records = build_mappings(&config, &ctx, cli.verbose)?
+                .iter()
+                .map(inspect_mapping)
+                .collect::<Vec<_>>();
+            let report = Report::new("verify", records);
             print_report(&report, json, true)?;
             Ok(exit_code(&report.summary, true))
         }
@@ -61,28 +55,21 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
         } => {
             let (config, ctx) = load_config(&config_path)?;
             let backup_dir = resolve_backup_dir(backup_dir.as_deref())?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings
+            let records = build_mappings(&config, &ctx, cli.verbose)?
                 .iter()
                 .map(|mapping| apply_repair(mapping, force, dry_run, backup_dir.as_deref()))
                 .collect::<Vec<_>>();
-            let report = Report {
-                command: "repair".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
+            let report = Report::new("repair", records);
             print_report(&report, json, cli.verbose)?;
             Ok(exit_code(&report.summary, true))
         }
         Command::Status { json } => {
             let (config, ctx) = load_config(&config_path)?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings.iter().map(inspect_mapping).collect::<Vec<_>>();
-            let report = Report {
-                command: "status".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
+            let records = build_mappings(&config, &ctx, cli.verbose)?
+                .iter()
+                .map(inspect_mapping)
+                .collect::<Vec<_>>();
+            let report = Report::new("status", records);
             print_report(&report, json, false)?;
             Ok(exit_code(&report.summary, true))
         }
@@ -110,21 +97,7 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
 }
 
 fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i32> {
-    if config_path.exists() && !force {
-        return Err(anyhow!(
-            "config already exists: {} (use --force to overwrite)",
-            config_path.display()
-        ));
-    }
-
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create config directory: {}",
-                parent.to_string_lossy()
-            )
-        })?;
-    }
+    check_config_overwrite(config_path, force)?;
 
     let selected_profiles = if profiles.is_empty() {
         vec![
@@ -139,14 +112,7 @@ fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i
     };
 
     let config = build_default_config(&selected_profiles);
-    let toml_text = toml::to_string_pretty(&config).context("failed to serialize config")?;
-
-    fs::write(config_path, toml_text).with_context(|| {
-        format!(
-            "failed to write config file: {}",
-            config_path.to_string_lossy()
-        )
-    })?;
+    write_config_file(config_path, &config)?;
 
     println!("created config: {}", config_path.display());
     Ok(0)
@@ -165,28 +131,9 @@ fn run_bootstrap(
     let ctx = build_resolve_context(config_path)?;
 
     if write_config {
-        if config_path.exists() && !force {
-            return Err(anyhow!(
-                "config already exists: {} (use --force to overwrite)",
-                config_path.display()
-            ));
-        }
-        let text = toml::to_string_pretty(&config).context("failed to serialize config")?;
+        check_config_overwrite(config_path, force)?;
         if !dry_run {
-            if let Some(parent) = config_path.parent() {
-                fs::create_dir_all(parent).with_context(|| {
-                    format!(
-                        "failed to create config directory: {}",
-                        parent.to_string_lossy()
-                    )
-                })?;
-            }
-            fs::write(config_path, text).with_context(|| {
-                format!(
-                    "failed to write config file: {}",
-                    config_path.to_string_lossy()
-                )
-            })?;
+            write_config_file(config_path, &config)?;
         }
         if verbose {
             eprintln!("bootstrap config prepared at: {}", config_path.display());
@@ -195,18 +142,31 @@ fn run_bootstrap(
 
     prepare_bootstrap_sources(&config, &ctx, dry_run, verbose)?;
     let backup_dir = resolve_backup_dir(backup_dir)?;
-    let mappings = build_mappings(&config, &ctx, verbose)?;
-    let records = mappings
+    let records = build_mappings(&config, &ctx, verbose)?
         .iter()
         .map(|mapping| apply_link(mapping, force, false, dry_run, backup_dir.as_deref()))
         .collect::<Vec<_>>();
-    let report = Report {
-        command: "bootstrap".to_owned(),
-        summary: Summary::from_records(&records),
-        records,
-    };
+    let report = Report::new("bootstrap", records);
     print_report(&report, json, verbose)?;
     Ok(exit_code(&report.summary, false))
+}
+
+fn check_config_overwrite(config_path: &Path, force: bool) -> Result<()> {
+    if config_path.exists() && !force {
+        return Err(anyhow!(
+            "config already exists: {} (use --force to overwrite)",
+            config_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn write_config_file(config_path: &Path, config: &ConfigFile) -> Result<()> {
+    let toml_text = toml::to_string_pretty(config).context("failed to serialize config")?;
+    ensure_parent_dir(config_path)?;
+    fs::write(config_path, toml_text)
+        .with_context(|| format!("failed to write config file: {}", config_path.display()))?;
+    Ok(())
 }
 
 fn resolve_backup_dir(backup_dir: Option<&Path>) -> Result<Option<std::path::PathBuf>> {
@@ -241,14 +201,7 @@ fn prepare_bootstrap_sources(
             }
             continue;
         }
-        if let Some(parent) = source.parent() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!(
-                    "failed to create source parent directory: {}",
-                    parent.display()
-                )
-            })?;
-        }
+        ensure_parent_dir(&source)?;
         fs::write(
             &source,
             "# master instructions\n\nUpdate this file to sync all linked instruction files.\n",

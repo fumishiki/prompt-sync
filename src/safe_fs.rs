@@ -180,14 +180,13 @@ pub(crate) fn calculate_sha256(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn sha256_path(path: &Path) -> PathBuf {
+    let ext = path.extension().map(|e| e.to_string_lossy()).unwrap_or_default();
+    path.with_extension(format!("{ext}.sha256"))
+}
+
 pub(crate) fn save_hash_metadata(backup_path: &Path, hash: &str, file_size: u64) -> Result<()> {
-    let hash_path = backup_path.with_extension(format!(
-        "{}.sha256",
-        backup_path
-            .extension()
-            .map(|e| e.to_string_lossy())
-            .unwrap_or_default()
-    ));
+    let hash_path = sha256_path(backup_path);
 
     let metadata = format!(
         "algorithm=sha256\nhash={}\nsize={}\ntimestamp={}\n",
@@ -274,12 +273,7 @@ pub(crate) fn cleanup_old_backups(backup_dir: &Path, max_versions: usize) -> Res
             let _ = fs::remove_file(path);
 
             // Also remove associated .sha256 file if exists
-            let sha256_path = path.with_extension(format!(
-                "{}.sha256",
-                path.extension()
-                    .map(|e| e.to_string_lossy())
-                    .unwrap_or_default()
-            ));
+            let sha256_path = sha256_path(path);
             let _ = fs::remove_file(sha256_path);
         }
     }

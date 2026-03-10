@@ -119,35 +119,20 @@ pub(crate) fn apply_link(
     let current = inspect_mapping(mapping);
 
     match current.status {
-        Status::Ok => Record {
-            status: Status::Skipped,
-            message: Some("already linked".to_owned()),
-            ..current
-        },
+        Status::Ok => current.with_status_msg(Status::Skipped, "already linked"),
         Status::Missing => link_create(mapping, dry_run),
         Status::Broken | Status::Conflict => {
             if only_missing {
-                return Record {
-                    status: Status::Skipped,
-                    message: Some("skipped by --only-missing".to_owned()),
-                    ..current
-                };
+                return current.with_status_msg(Status::Skipped, "skipped by --only-missing");
             }
             if !force {
-                return Record {
-                    status: Status::Error,
-                    message: Some("target exists and differs (use --force)".to_owned()),
-                    ..current
-                };
+                return current
+                    .with_status_msg(Status::Error, "target exists and differs (use --force)");
             }
             link_replace(mapping, dry_run, backup_dir)
         }
         Status::Error => current,
-        _ => Record {
-            status: Status::Error,
-            message: Some("unexpected state".to_owned()),
-            ..current
-        },
+        _ => current.with_status_msg(Status::Error, "unexpected state"),
     }
 }
 
@@ -160,30 +145,21 @@ pub(crate) fn apply_repair(
     let current = inspect_mapping(mapping);
 
     match current.status {
-        Status::Ok => Record {
-            status: Status::Skipped,
-            message: Some("already healthy".to_owned()),
-            ..current
-        },
+        Status::Ok => current.with_status_msg(Status::Skipped, "already healthy"),
         Status::Missing => link_create(mapping, dry_run),
         Status::Broken => link_replace(mapping, dry_run, backup_dir),
         Status::Conflict => {
             if force_conflict {
                 link_replace(mapping, dry_run, backup_dir)
             } else {
-                Record {
-                    status: Status::Skipped,
-                    message: Some("conflict skipped (use --force to override)".to_owned()),
-                    ..current
-                }
+                current.with_status_msg(
+                    Status::Skipped,
+                    "conflict skipped (use --force to override)",
+                )
             }
         }
         Status::Error => current,
-        _ => Record {
-            status: Status::Error,
-            message: Some("unexpected state".to_owned()),
-            ..current
-        },
+        _ => current.with_status_msg(Status::Error, "unexpected state"),
     }
 }
 
@@ -193,77 +169,44 @@ pub(crate) fn inspect_mapping(mapping: &Mapping) -> Record {
     let source_meta = match fs::symlink_metadata(&mapping.source) {
         Ok(meta) => meta,
         Err(err) => {
-            return Record {
-                status: Status::Error,
-                message: Some(format!(
-                    "source metadata error {}: {}",
-                    mapping.source.display(),
-                    err
-                )),
-                ..base
-            };
+            return base.with_status_msg(
+                Status::Error,
+                format!("source metadata error {}: {}", mapping.source.display(), err),
+            );
         }
     };
 
     let target_meta = match fs::symlink_metadata(&mapping.target) {
         Ok(meta) => meta,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Record {
-                status: Status::Missing,
-                message: Some("target missing".to_owned()),
-                ..base
-            };
+            return base.with_status_msg(Status::Missing, "target missing");
         }
         Err(err) => {
-            return Record {
-                status: Status::Error,
-                message: Some(format!(
-                    "target metadata error {}: {}",
-                    mapping.target.display(),
-                    err
-                )),
-                ..base
-            };
+            return base.with_status_msg(
+                Status::Error,
+                format!("target metadata error {}: {}", mapping.target.display(), err),
+            );
         }
     };
 
     if !source_meta.file_type().is_file() {
-        return Record {
-            status: Status::Error,
-            message: Some("source is not a regular file".to_owned()),
-            ..base
-        };
+        return base.with_status_msg(Status::Error, "source is not a regular file");
     }
 
     if !target_meta.file_type().is_file() {
-        return Record {
-            status: Status::Conflict,
-            message: Some("target exists but is not a regular file".to_owned()),
-            ..base
-        };
+        return base.with_status_msg(Status::Conflict, "target exists but is not a regular file");
     }
 
     if same_file(&source_meta, &target_meta) {
-        return Record {
-            status: Status::Ok,
-            message: Some("inode match".to_owned()),
-            ..base
-        };
+        return base.with_status_msg(Status::Ok, "inode match");
     }
 
     if hardlink_count(&target_meta) > 1 {
-        return Record {
-            status: Status::Broken,
-            message: Some("target is hardlinked to a different source".to_owned()),
-            ..base
-        };
+        return base
+            .with_status_msg(Status::Broken, "target is hardlinked to a different source");
     }
 
-    Record {
-        status: Status::Conflict,
-        message: Some("target differs and is not linked".to_owned()),
-        ..base
-    }
+    base.with_status_msg(Status::Conflict, "target differs and is not linked")
 }
 
 pub(crate) fn print_report(report: &Report, json: bool, show_records_in_text: bool) -> Result<()> {
@@ -322,135 +265,100 @@ fn link_create(mapping: &Mapping, dry_run: bool) -> Record {
     let base = base_record(mapping);
 
     if dry_run {
-        return Record {
-            status: Status::WouldCreate,
-            message: Some("would create hardlink".to_owned()),
-            ..base
-        };
+        return base.with_status_msg(Status::WouldCreate, "would create hardlink");
     }
 
     if let Err(err) = ensure_parent_dir(&mapping.target) {
-        return Record {
-            status: Status::Error,
-            message: Some(err.to_string()),
-            ..base
-        };
+        return base.with_status_msg(Status::Error, err.to_string());
     }
 
     if let Err(err) = create_hard_link_checked(&mapping.source, &mapping.target) {
-        return Record {
-            status: Status::Error,
-            message: Some(err.to_string()),
-            ..base
-        };
+        return base.with_status_msg(Status::Error, err.to_string());
     }
 
-    Record {
-        status: Status::Created,
-        message: Some("created hardlink".to_owned()),
-        ..base
-    }
+    base.with_status_msg(Status::Created, "created hardlink")
 }
 
 fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path::Path>) -> Record {
     let base = base_record(mapping);
 
     if dry_run {
-        return Record {
-            status: Status::WouldReplace,
-            message: Some("would replace target with hardlink".to_owned()),
-            ..base
-        };
+        return base.with_status_msg(Status::WouldReplace, "would replace target with hardlink");
     }
 
     if let Err(err) = ensure_parent_dir(&mapping.target) {
-        if let Some(backup_root) = backup_dir {
-            let logger = OperationLog::new(backup_root);
-            let _ = logger.record(logging::LogEntry {
-                action: Action::Replace,
-                source: &mapping.source,
-                target: &mapping.target,
-                status: "failed",
-                error: Some(&err.to_string()),
-                hash_before: None,
-                backup_location: None,
-            });
-        }
-        return Record {
-            status: Status::Error,
-            message: Some(err.to_string()),
-            ..base
-        };
+        let msg = err.to_string();
+        maybe_log(backup_dir, &mapping.source, &mapping.target, "failed", Some(&msg), None, None);
+        return base.with_status_msg(Status::Error, msg);
     }
 
-    // Calculate hash before replacement if backup is enabled
-    let hash_before = if backup_dir.is_some() {
-        calculate_sha256(&mapping.target).ok()
-    } else {
-        None
-    };
+    let hash_before =
+        backup_dir.is_some().then(|| calculate_sha256(&mapping.target).ok()).flatten();
 
     let backup_outcome = match remove_existing_target_file(&mapping.target, backup_dir) {
         Ok(outcome) => outcome,
         Err(err) => {
-            if let Some(backup_root) = backup_dir {
-                let logger = OperationLog::new(backup_root);
-                let _ = logger.record(logging::LogEntry {
-                    action: Action::Replace,
-                    source: &mapping.source,
-                    target: &mapping.target,
-                    status: "failed",
-                    error: Some(&err.to_string()),
-                    hash_before: hash_before.as_deref(),
-                    backup_location: None,
-                });
-            }
-            return Record {
-                status: Status::Error,
-                message: Some(err.to_string()),
-                ..base
-            };
+            let msg = err.to_string();
+            maybe_log(
+                backup_dir,
+                &mapping.source,
+                &mapping.target,
+                "failed",
+                Some(&msg),
+                hash_before.as_deref(),
+                None,
+            );
+            return base.with_status_msg(Status::Error, msg);
         }
     };
 
     if let Err(err) = create_hard_link_checked(&mapping.source, &mapping.target) {
-        if let Some(backup_root) = backup_dir {
-            let logger = OperationLog::new(backup_root);
-            let _ = logger.record(logging::LogEntry {
-                action: Action::Replace,
-                source: &mapping.source,
-                target: &mapping.target,
-                status: "failed",
-                error: Some(&err.to_string()),
-                hash_before: hash_before.as_deref(),
-                backup_location: backup_outcome.backup_path.as_deref(),
-            });
-        }
-        return Record {
-            status: Status::Error,
-            message: Some(err.to_string()),
-            ..base
-        };
+        let msg = err.to_string();
+        maybe_log(
+            backup_dir,
+            &mapping.source,
+            &mapping.target,
+            "failed",
+            Some(&msg),
+            hash_before.as_deref(),
+            backup_outcome.backup_path.as_deref(),
+        );
+        return base.with_status_msg(Status::Error, msg);
     }
 
-    // Log successful replacement
-    if let Some(backup_root) = backup_dir {
-        let logger = OperationLog::new(backup_root);
+    maybe_log(
+        backup_dir,
+        &mapping.source,
+        &mapping.target,
+        "success",
+        None,
+        hash_before.as_deref(),
+        backup_outcome.backup_path.as_deref(),
+    );
+
+    base.with_status_msg(Status::Replaced, "replaced target with hardlink")
+}
+
+fn maybe_log(
+    backup_dir: Option<&Path>,
+    source: &Path,
+    target: &Path,
+    status: &str,
+    error: Option<&str>,
+    hash_before: Option<&str>,
+    backup_location: Option<&Path>,
+) {
+    if let Some(root) = backup_dir {
+        let logger = OperationLog::new(root);
         let _ = logger.record(logging::LogEntry {
             action: Action::Replace,
-            source: &mapping.source,
-            target: &mapping.target,
-            status: "success",
-            error: None,
-            hash_before: hash_before.as_deref(),
-            backup_location: backup_outcome.backup_path.as_deref(),
+            source,
+            target,
+            status,
+            error,
+            hash_before,
+            backup_location,
         });
-    }
-
-    Record {
-        status: Status::Replaced,
-        message: Some("replaced target with hardlink".to_owned()),
-        ..base
     }
 }
 

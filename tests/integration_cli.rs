@@ -281,8 +281,8 @@ fn link_skills_sets_creates_hardlinks() -> anyhow::Result<()> {
 
     let target_root = temp.path().join("target");
 
-    let source_str = source_root.display().to_string().replace('\\', "/");
-    let target_str = target_root.display().to_string().replace('\\', "/");
+    let source_str = path_str(&source_root);
+    let target_str = path_str(&target_root);
 
     let config = format!(
         r#"[[skills_sets]]
@@ -338,8 +338,8 @@ fn link_skills_sets_exclude_filters_files() -> anyhow::Result<()> {
     fs::write(skill2_dir.join("SKILL.md"), "other content")?;
 
     let target_root = temp.path().join("target");
-    let source_str = source_root.display().to_string().replace('\\', "/");
-    let target_str = target_root.display().to_string().replace('\\', "/");
+    let source_str = path_str(&source_root);
+    let target_str = path_str(&target_root);
 
     let config = format!(
         r#"[[skills_sets]]
@@ -394,8 +394,8 @@ fn link_skills_sets_only_skills_filters_dirs() -> anyhow::Result<()> {
     }
 
     let target_root = temp.path().join("target");
-    let source_str = source_root.display().to_string().replace('\\', "/");
-    let target_str = target_root.display().to_string().replace('\\', "/");
+    let source_str = path_str(&source_root);
+    let target_str = path_str(&target_root);
 
     let config = format!(
         r#"[[skills_sets]]
@@ -443,8 +443,8 @@ fn link_skills_sets_exclude_skills_filters_dirs() -> anyhow::Result<()> {
     }
 
     let target_root = temp.path().join("target");
-    let source_str = source_root.display().to_string().replace('\\', "/");
-    let target_str = target_root.display().to_string().replace('\\', "/");
+    let source_str = path_str(&source_root);
+    let target_str = path_str(&target_root);
 
     let config = format!(
         r#"[[skills_sets]]
@@ -481,8 +481,8 @@ exclude_skills = ["beta"]
 
 fn write_config(root: &Path, source: &Path, target: &Path) -> anyhow::Result<()> {
     // Convert paths to string, replacing backslashes with forward slashes for TOML compatibility
-    let source_str = source.display().to_string().replace('\\', "/");
-    let target_str = target.display().to_string().replace('\\', "/");
+    let source_str = path_str(source);
+    let target_str = path_str(target);
 
     let config = format!(
         r#"[[links]]
@@ -493,4 +493,8 @@ targets = ["{}"]
     );
     fs::write(root.join("prompt-sync.toml"), config)?;
     Ok(())
+}
+
+fn path_str(p: &Path) -> String {
+    p.display().to_string().replace('\\', "/")
 }

@@ -54,6 +54,13 @@ pub(crate) struct Record {
     pub(crate) message: Option<String>,
 }
 
+impl Record {
+    /// Consume this record and return a new one with the given status and message.
+    pub(crate) fn with_status_msg(self, status: Status, msg: impl Into<String>) -> Self {
+        Self { status, message: Some(msg.into()), ..self }
+    }
+}
+
 #[derive(Debug, Default, Serialize)]
 pub(crate) struct Summary {
     pub(crate) total: usize,
@@ -74,6 +81,12 @@ pub(crate) struct Report {
     pub(crate) command: String,
     pub(crate) summary: Summary,
     pub(crate) records: Vec<Record>,
+}
+
+impl Report {
+    pub(crate) fn new(command: &str, records: Vec<Record>) -> Self {
+        Self { command: command.to_owned(), summary: Summary::from_records(&records), records }
+    }
 }
 
 impl Summary {
