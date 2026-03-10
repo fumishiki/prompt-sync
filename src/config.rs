@@ -94,9 +94,7 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
         skills_sets.push(SkillsSet {
             source_root: "~/.agents/skills".to_owned(),
             target_roots,
-            exclude: Vec::new(),
-            only_skills: Vec::new(),
-            exclude_skills: Vec::new(),
+            ..Default::default()
         });
     }
 
@@ -109,8 +107,7 @@ pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
             source_root: "~/.codex/skills".to_owned(),
             target_roots: legacy_targets,
             exclude: vec!["*/.system/**".to_owned()],
-            only_skills: Vec::new(),
-            exclude_skills: Vec::new(),
+            ..Default::default()
         });
     }
 
@@ -176,16 +173,13 @@ pub(crate) fn build_bootstrap_config() -> ConfigFile {
                     "<repo>/.agents/skills".to_owned(),
                     "~/.kiro/steering".to_owned(),
                 ],
-                exclude: Vec::new(),
-                only_skills: Vec::new(),
-                exclude_skills: Vec::new(),
+                ..Default::default()
             },
             SkillsSet {
                 source_root: "~/.codex/skills".to_owned(),
                 target_roots: vec!["~/.claude/skills".to_owned()],
                 exclude: vec!["*/.system/**".to_owned()],
-                only_skills: Vec::new(),
-                exclude_skills: Vec::new(),
+                ..Default::default()
             },
         ],
     }

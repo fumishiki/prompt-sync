@@ -6,6 +6,8 @@ use anyhow::{Context, Result, anyhow};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use crate::safe_fs::ensure_parent_dir;
+
 const COMMIT_GUARD_HOOK: &str = r#"#!/bin/sh
 set -eu
 
@@ -44,14 +46,7 @@ pub(crate) fn install_commit_guard(
         return Ok(hook_path);
     }
 
-    if let Some(parent) = hook_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create hook directory: {}",
-                parent.to_string_lossy()
-            )
-        })?;
-    }
+    ensure_parent_dir(&hook_path)?;
 
     fs::write(&hook_path, COMMIT_GUARD_HOOK)
         .with_context(|| format!("failed to write hook: {}", hook_path.display()))?;

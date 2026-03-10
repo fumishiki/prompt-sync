@@ -39,8 +39,7 @@ pub(crate) struct LogEntry<'a> {
 
 impl OperationLog {
     pub(crate) fn new(backup_dir: &Path) -> Self {
-        let log_path = backup_dir.join(LOG_FILE_NAME);
-        OperationLog { log_path }
+        Self { log_path: backup_dir.join(LOG_FILE_NAME) }
     }
 
     pub(crate) fn record(&self, entry_data: LogEntry<'_>) -> Result<()> {
@@ -70,7 +69,7 @@ impl OperationLog {
 
         // Parse as JSON array
         let mut entries: Vec<Value> =
-            serde_json::from_str(&log_contents).unwrap_or_else(|_| Vec::new());
+            serde_json::from_str(&log_contents).unwrap_or_default();
 
         entries.push(entry);
 

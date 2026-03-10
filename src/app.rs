@@ -8,8 +8,9 @@ use crate::config::{
     ConfigFile, build_bootstrap_config, build_default_config, build_resolve_context, load_config,
 };
 use crate::engine::{apply_link, apply_repair, build_mappings, inspect_mapping, print_report};
-use crate::model::{Report, ResolveContext, Summary};
+use crate::model::{Mapping, Record, Report, ResolveContext, Summary};
 use crate::pathing::{absolute_path, resolve_path};
+use crate::safe_fs::ensure_parent_dir;
 use crate::vcs::install_commit_guard;
 
 pub(crate) fn run(cli: Cli) -> Result<i32> {
@@ -24,34 +25,13 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
             json,
             backup_dir,
         } => {
-            let (config, ctx) = load_config(&config_path)?;
             let backup_dir = resolve_backup_dir(backup_dir.as_deref())?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings
-                .iter()
-                .map(|mapping| {
-                    apply_link(mapping, force, only_missing, dry_run, backup_dir.as_deref())
-                })
-                .collect::<Vec<_>>();
-            let report = Report {
-                command: "link".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, cli.verbose)?;
-            Ok(exit_code(&report.summary, false))
+            run_report_command(&config_path, cli.verbose, "link", json, cli.verbose, false, |m| {
+                apply_link(m, force, only_missing, dry_run, backup_dir.as_deref())
+            })
         }
         Command::Verify { json } => {
-            let (config, ctx) = load_config(&config_path)?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings.iter().map(inspect_mapping).collect::<Vec<_>>();
-            let report = Report {
-                command: "verify".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, true)?;
-            Ok(exit_code(&report.summary, true))
+            run_report_command(&config_path, cli.verbose, "verify", json, true, true, inspect_mapping)
         }
         Command::Repair {
             force,
@@ -59,32 +39,13 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
             json,
             backup_dir,
         } => {
-            let (config, ctx) = load_config(&config_path)?;
             let backup_dir = resolve_backup_dir(backup_dir.as_deref())?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings
-                .iter()
-                .map(|mapping| apply_repair(mapping, force, dry_run, backup_dir.as_deref()))
-                .collect::<Vec<_>>();
-            let report = Report {
-                command: "repair".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, cli.verbose)?;
-            Ok(exit_code(&report.summary, true))
+            run_report_command(&config_path, cli.verbose, "repair", json, cli.verbose, true, |m| {
+                apply_repair(m, force, dry_run, backup_dir.as_deref())
+            })
         }
         Command::Status { json } => {
-            let (config, ctx) = load_config(&config_path)?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings.iter().map(inspect_mapping).collect::<Vec<_>>();
-            let report = Report {
-                command: "status".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, false)?;
-            Ok(exit_code(&report.summary, true))
+            run_report_command(&config_path, cli.verbose, "status", json, false, true, inspect_mapping)
         }
         Command::Bootstrap {
             force,
@@ -109,6 +70,32 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
     }
 }
 
+/// Execute a standard inspect/apply command: load config, build mappings, run `apply` on each,
+/// build a report, print it, and return the exit code.
+///
+/// `show_records`: whether to print individual record lines in text mode.
+/// `include_inconsistency`: whether missing/broken/conflict counts drive exit code 1.
+fn run_report_command(
+    config_path: &Path,
+    verbose: bool,
+    command_name: &str,
+    json: bool,
+    show_records: bool,
+    include_inconsistency: bool,
+    apply: impl Fn(&Mapping) -> Record,
+) -> Result<i32> {
+    let (config, ctx) = load_config(config_path)?;
+    let mappings = build_mappings(&config, &ctx, verbose)?;
+    let records = mappings.iter().map(apply).collect::<Vec<_>>();
+    let report = Report {
+        command: command_name.to_owned(),
+        summary: Summary::from_records(&records),
+        records,
+    };
+    print_report(&report, json, show_records)?;
+    Ok(exit_code(&report.summary, include_inconsistency))
+}
+
 fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i32> {
     if config_path.exists() && !force {
         return Err(anyhow!(
@@ -117,14 +104,7 @@ fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i
         ));
     }
 
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create config directory: {}",
-                parent.to_string_lossy()
-            )
-        })?;
-    }
+    ensure_parent_dir(config_path)?;
 
     let selected_profiles = if profiles.is_empty() {
         vec![
@@ -173,14 +153,7 @@ fn run_bootstrap(
         }
         let text = toml::to_string_pretty(&config).context("failed to serialize config")?;
         if !dry_run {
-            if let Some(parent) = config_path.parent() {
-                fs::create_dir_all(parent).with_context(|| {
-                    format!(
-                        "failed to create config directory: {}",
-                        parent.to_string_lossy()
-                    )
-                })?;
-            }
+            ensure_parent_dir(config_path)?;
             fs::write(config_path, text).with_context(|| {
                 format!(
                     "failed to write config file: {}",
@@ -241,14 +214,7 @@ fn prepare_bootstrap_sources(
             }
             continue;
         }
-        if let Some(parent) = source.parent() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!(
-                    "failed to create source parent directory: {}",
-                    parent.display()
-                )
-            })?;
-        }
+        ensure_parent_dir(&source)?;
         fs::write(
             &source,
             "# master instructions\n\nUpdate this file to sync all linked instruction files.\n",

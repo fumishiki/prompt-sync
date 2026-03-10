@@ -54,6 +54,12 @@ pub(crate) struct Record {
     pub(crate) message: Option<String>,
 }
 
+impl Record {
+    pub(crate) fn with_status(self, status: Status, message: impl Into<String>) -> Self {
+        Self { status, message: Some(message.into()), ..self }
+    }
+}
+
 #[derive(Debug, Default, Serialize)]
 pub(crate) struct Summary {
     pub(crate) total: usize,
