@@ -56,61 +56,46 @@ pub(crate) fn load_config(config_path: &Path) -> Result<(ConfigFile, ResolveCont
 }
 
 pub(crate) fn build_default_config(profiles: &[Profile]) -> ConfigFile {
-    let profile_set = profiles.iter().copied().collect::<HashSet<_>>();
+    let profile_set: HashSet<_> = profiles.iter().copied().collect();
+    let has = |p| profile_set.contains(&p);
 
-    let mut link_targets = Vec::new();
-    if profile_set.contains(&Profile::Codex) {
-        link_targets.push("~/.codex/AGENTS.md".to_owned());
-    }
-    if profile_set.contains(&Profile::Claude) {
-        link_targets.push("~/.claude/CLAUDE.md".to_owned());
-    }
-    if profile_set.contains(&Profile::Gemini) {
-        link_targets.push("~/.gemini/GEMINI.md".to_owned());
-    }
-    if profile_set.contains(&Profile::Copilot) {
-        link_targets.push("<repo>/.github/copilot-instructions.md".to_owned());
-    }
-    if profile_set.contains(&Profile::Kiro) {
-        link_targets.push("~/.kiro/steering/master.md".to_owned());
-    }
+    let link_targets: Vec<String> = [
+        (Profile::Codex,   "~/.codex/AGENTS.md"),
+        (Profile::Claude,  "~/.claude/CLAUDE.md"),
+        (Profile::Gemini,  "~/.gemini/GEMINI.md"),
+        (Profile::Copilot, "<repo>/.github/copilot-instructions.md"),
+        (Profile::Kiro,    "~/.kiro/steering/master.md"),
+    ]
+    .into_iter()
+    .filter(|(p, _)| has(*p))
+    .map(|(_, t)| t.to_owned())
+    .collect();
 
-    let mut target_roots = Vec::new();
-    if profile_set.contains(&Profile::Claude) {
-        target_roots.push("~/.claude/skills".to_owned());
-    }
-    if profile_set.contains(&Profile::Gemini) {
-        target_roots.push("~/.gemini/skills".to_owned());
-    }
-    if profile_set.contains(&Profile::Codex) {
-        target_roots.push("~/.codex/skills".to_owned());
-    }
-    if profile_set.contains(&Profile::Kiro) {
-        target_roots.push("~/.kiro/steering".to_owned());
-    }
+    let target_roots: Vec<String> = [
+        (Profile::Claude, "~/.claude/skills"),
+        (Profile::Gemini, "~/.gemini/skills"),
+        (Profile::Codex,  "~/.codex/skills"),
+        (Profile::Kiro,   "~/.kiro/steering"),
+    ]
+    .into_iter()
+    .filter(|(p, _)| has(*p))
+    .map(|(_, t)| t.to_owned())
+    .collect();
 
     let mut skills_sets = Vec::new();
     if !target_roots.is_empty() {
         skills_sets.push(SkillsSet {
             source_root: "~/.agents/skills".to_owned(),
             target_roots,
-            exclude: Vec::new(),
-            only_skills: Vec::new(),
-            exclude_skills: Vec::new(),
+            ..SkillsSet::default()
         });
     }
-
-    let mut legacy_targets = Vec::new();
-    if profile_set.contains(&Profile::Claude) {
-        legacy_targets.push("~/.claude/skills".to_owned());
-    }
-    if !legacy_targets.is_empty() {
+    if has(Profile::Claude) {
         skills_sets.push(SkillsSet {
             source_root: "~/.codex/skills".to_owned(),
-            target_roots: legacy_targets,
+            target_roots: vec!["~/.claude/skills".to_owned()],
             exclude: vec!["*/.system/**".to_owned()],
-            only_skills: Vec::new(),
-            exclude_skills: Vec::new(),
+            ..SkillsSet::default()
         });
     }
 

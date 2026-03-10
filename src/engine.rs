@@ -289,30 +289,18 @@ pub(crate) fn print_report(report: &Report, json: bool, show_records_in_text: bo
         report.summary.errors,
     );
 
-    if show_records_in_text {
-        for record in &report.records {
-            let message = record.message.as_deref().unwrap_or("");
-            println!(
-                "[{:?}] {} -> {} ({message})",
-                record.status,
-                record.source.display(),
-                record.target.display(),
-            );
-        }
-    } else {
-        for record in report
-            .records
-            .iter()
-            .filter(|record| record.status == Status::Error)
-        {
-            let message = record.message.as_deref().unwrap_or("");
-            println!(
-                "[{:?}] {} -> {} ({message})",
-                record.status,
-                record.source.display(),
-                record.target.display(),
-            );
-        }
+    for record in report
+        .records
+        .iter()
+        .filter(|r| show_records_in_text || r.status == Status::Error)
+    {
+        let message = record.message.as_deref().unwrap_or("");
+        println!(
+            "[{:?}] {} -> {} ({message})",
+            record.status,
+            record.source.display(),
+            record.target.display(),
+        );
     }
 
     Ok(())
@@ -364,18 +352,7 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
     }
 
     if let Err(err) = ensure_parent_dir(&mapping.target) {
-        if let Some(backup_root) = backup_dir {
-            let logger = OperationLog::new(backup_root);
-            let _ = logger.record(logging::LogEntry {
-                action: Action::Replace,
-                source: &mapping.source,
-                target: &mapping.target,
-                status: "failed",
-                error: Some(&err.to_string()),
-                hash_before: None,
-                backup_location: None,
-            });
-        }
+        log_replace_op(backup_dir, &mapping.source, &mapping.target, "failed", Some(&err.to_string()), None, None);
         return Record {
             status: Status::Error,
             message: Some(err.to_string()),
@@ -384,27 +361,12 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
     }
 
     // Calculate hash before replacement if backup is enabled
-    let hash_before = if backup_dir.is_some() {
-        calculate_sha256(&mapping.target).ok()
-    } else {
-        None
-    };
+    let hash_before = backup_dir.and_then(|_| calculate_sha256(&mapping.target).ok());
 
     let backup_outcome = match remove_existing_target_file(&mapping.target, backup_dir) {
         Ok(outcome) => outcome,
         Err(err) => {
-            if let Some(backup_root) = backup_dir {
-                let logger = OperationLog::new(backup_root);
-                let _ = logger.record(logging::LogEntry {
-                    action: Action::Replace,
-                    source: &mapping.source,
-                    target: &mapping.target,
-                    status: "failed",
-                    error: Some(&err.to_string()),
-                    hash_before: hash_before.as_deref(),
-                    backup_location: None,
-                });
-            }
+            log_replace_op(backup_dir, &mapping.source, &mapping.target, "failed", Some(&err.to_string()), hash_before.as_deref(), None);
             return Record {
                 status: Status::Error,
                 message: Some(err.to_string()),
@@ -414,18 +376,7 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
     };
 
     if let Err(err) = create_hard_link_checked(&mapping.source, &mapping.target) {
-        if let Some(backup_root) = backup_dir {
-            let logger = OperationLog::new(backup_root);
-            let _ = logger.record(logging::LogEntry {
-                action: Action::Replace,
-                source: &mapping.source,
-                target: &mapping.target,
-                status: "failed",
-                error: Some(&err.to_string()),
-                hash_before: hash_before.as_deref(),
-                backup_location: backup_outcome.backup_path.as_deref(),
-            });
-        }
+        log_replace_op(backup_dir, &mapping.source, &mapping.target, "failed", Some(&err.to_string()), hash_before.as_deref(), backup_outcome.backup_path.as_deref());
         return Record {
             status: Status::Error,
             message: Some(err.to_string()),
@@ -433,24 +384,34 @@ fn link_replace(mapping: &Mapping, dry_run: bool, backup_dir: Option<&std::path:
         };
     }
 
-    // Log successful replacement
-    if let Some(backup_root) = backup_dir {
-        let logger = OperationLog::new(backup_root);
-        let _ = logger.record(logging::LogEntry {
-            action: Action::Replace,
-            source: &mapping.source,
-            target: &mapping.target,
-            status: "success",
-            error: None,
-            hash_before: hash_before.as_deref(),
-            backup_location: backup_outcome.backup_path.as_deref(),
-        });
-    }
+    log_replace_op(backup_dir, &mapping.source, &mapping.target, "success", None, hash_before.as_deref(), backup_outcome.backup_path.as_deref());
 
     Record {
         status: Status::Replaced,
         message: Some("replaced target with hardlink".to_owned()),
         ..base
+    }
+}
+
+fn log_replace_op(
+    backup_dir: Option<&Path>,
+    source: &Path,
+    target: &Path,
+    status: &str,
+    error: Option<&str>,
+    hash_before: Option<&str>,
+    backup_location: Option<&Path>,
+) {
+    if let Some(backup_root) = backup_dir {
+        let _ = OperationLog::new(backup_root).record(logging::LogEntry {
+            action: Action::Replace,
+            source,
+            target,
+            status,
+            error,
+            hash_before,
+            backup_location,
+        });
     }
 }
 

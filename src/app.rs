@@ -8,7 +8,7 @@ use crate::config::{
     ConfigFile, build_bootstrap_config, build_default_config, build_resolve_context, load_config,
 };
 use crate::engine::{apply_link, apply_repair, build_mappings, inspect_mapping, print_report};
-use crate::model::{Report, ResolveContext, Summary};
+use crate::model::{Mapping, Record, Report, ResolveContext, Summary};
 use crate::pathing::{absolute_path, resolve_path};
 use crate::vcs::install_commit_guard;
 
@@ -24,34 +24,13 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
             json,
             backup_dir,
         } => {
-            let (config, ctx) = load_config(&config_path)?;
             let backup_dir = resolve_backup_dir(backup_dir.as_deref())?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings
-                .iter()
-                .map(|mapping| {
-                    apply_link(mapping, force, only_missing, dry_run, backup_dir.as_deref())
-                })
-                .collect::<Vec<_>>();
-            let report = Report {
-                command: "link".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, cli.verbose)?;
-            Ok(exit_code(&report.summary, false))
+            run_with_mappings(&config_path, cli.verbose, "link", json, cli.verbose, false, |m| {
+                apply_link(m, force, only_missing, dry_run, backup_dir.as_deref())
+            })
         }
         Command::Verify { json } => {
-            let (config, ctx) = load_config(&config_path)?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings.iter().map(inspect_mapping).collect::<Vec<_>>();
-            let report = Report {
-                command: "verify".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, true)?;
-            Ok(exit_code(&report.summary, true))
+            run_with_mappings(&config_path, cli.verbose, "verify", json, true, true, inspect_mapping)
         }
         Command::Repair {
             force,
@@ -59,32 +38,13 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
             json,
             backup_dir,
         } => {
-            let (config, ctx) = load_config(&config_path)?;
             let backup_dir = resolve_backup_dir(backup_dir.as_deref())?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings
-                .iter()
-                .map(|mapping| apply_repair(mapping, force, dry_run, backup_dir.as_deref()))
-                .collect::<Vec<_>>();
-            let report = Report {
-                command: "repair".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, cli.verbose)?;
-            Ok(exit_code(&report.summary, true))
+            run_with_mappings(&config_path, cli.verbose, "repair", json, cli.verbose, true, |m| {
+                apply_repair(m, force, dry_run, backup_dir.as_deref())
+            })
         }
         Command::Status { json } => {
-            let (config, ctx) = load_config(&config_path)?;
-            let mappings = build_mappings(&config, &ctx, cli.verbose)?;
-            let records = mappings.iter().map(inspect_mapping).collect::<Vec<_>>();
-            let report = Report {
-                command: "status".to_owned(),
-                summary: Summary::from_records(&records),
-                records,
-            };
-            print_report(&report, json, false)?;
-            Ok(exit_code(&report.summary, true))
+            run_with_mappings(&config_path, cli.verbose, "status", json, false, true, inspect_mapping)
         }
         Command::Bootstrap {
             force,
@@ -109,21 +69,36 @@ pub(crate) fn run(cli: Cli) -> Result<i32> {
     }
 }
 
+fn run_with_mappings<F>(
+    config_path: &Path,
+    verbose: bool,
+    command_name: &str,
+    json: bool,
+    show_records_in_text: bool,
+    strict_exit: bool,
+    apply: F,
+) -> Result<i32>
+where
+    F: Fn(&Mapping) -> Record,
+{
+    let (config, ctx) = load_config(config_path)?;
+    let mappings = build_mappings(&config, &ctx, verbose)?;
+    let records: Vec<_> = mappings.iter().map(apply).collect();
+    let report = Report {
+        command: command_name.to_owned(),
+        summary: Summary::from_records(&records),
+        records,
+    };
+    print_report(&report, json, show_records_in_text)?;
+    Ok(exit_code(&report.summary, strict_exit))
+}
+
 fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i32> {
     if config_path.exists() && !force {
         return Err(anyhow!(
             "config already exists: {} (use --force to overwrite)",
             config_path.display()
         ));
-    }
-
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create config directory: {}",
-                parent.to_string_lossy()
-            )
-        })?;
     }
 
     let selected_profiles = if profiles.is_empty() {
@@ -139,15 +114,7 @@ fn run_init(config_path: &Path, force: bool, profiles: Vec<Profile>) -> Result<i
     };
 
     let config = build_default_config(&selected_profiles);
-    let toml_text = toml::to_string_pretty(&config).context("failed to serialize config")?;
-
-    fs::write(config_path, toml_text).with_context(|| {
-        format!(
-            "failed to write config file: {}",
-            config_path.to_string_lossy()
-        )
-    })?;
-
+    write_config_to_disk(&config, config_path)?;
     println!("created config: {}", config_path.display());
     Ok(0)
 }
@@ -171,22 +138,8 @@ fn run_bootstrap(
                 config_path.display()
             ));
         }
-        let text = toml::to_string_pretty(&config).context("failed to serialize config")?;
         if !dry_run {
-            if let Some(parent) = config_path.parent() {
-                fs::create_dir_all(parent).with_context(|| {
-                    format!(
-                        "failed to create config directory: {}",
-                        parent.to_string_lossy()
-                    )
-                })?;
-            }
-            fs::write(config_path, text).with_context(|| {
-                format!(
-                    "failed to write config file: {}",
-                    config_path.to_string_lossy()
-                )
-            })?;
+            write_config_to_disk(&config, config_path)?;
         }
         if verbose {
             eprintln!("bootstrap config prepared at: {}", config_path.display());
@@ -196,10 +149,10 @@ fn run_bootstrap(
     prepare_bootstrap_sources(&config, &ctx, dry_run, verbose)?;
     let backup_dir = resolve_backup_dir(backup_dir)?;
     let mappings = build_mappings(&config, &ctx, verbose)?;
-    let records = mappings
+    let records: Vec<_> = mappings
         .iter()
-        .map(|mapping| apply_link(mapping, force, false, dry_run, backup_dir.as_deref()))
-        .collect::<Vec<_>>();
+        .map(|m| apply_link(m, force, false, dry_run, backup_dir.as_deref()))
+        .collect();
     let report = Report {
         command: "bootstrap".to_owned(),
         summary: Summary::from_records(&records),
@@ -209,8 +162,16 @@ fn run_bootstrap(
     Ok(exit_code(&report.summary, false))
 }
 
-fn resolve_backup_dir(backup_dir: Option<&Path>) -> Result<Option<std::path::PathBuf>> {
-    backup_dir.map(absolute_path).transpose()
+fn write_config_to_disk(config: &ConfigFile, config_path: &Path) -> Result<()> {
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!("failed to create config directory: {}", parent.to_string_lossy())
+        })?;
+    }
+    let text = toml::to_string_pretty(config).context("failed to serialize config")?;
+    fs::write(config_path, text).with_context(|| {
+        format!("failed to write config file: {}", config_path.to_string_lossy())
+    })
 }
 
 fn prepare_bootstrap_sources(
@@ -294,6 +255,10 @@ fn prepare_bootstrap_sources(
     }
 
     Ok(())
+}
+
+fn resolve_backup_dir(backup_dir: Option<&Path>) -> Result<Option<std::path::PathBuf>> {
+    backup_dir.map(absolute_path).transpose()
 }
 
 fn exit_code(summary: &Summary, include_inconsistency: bool) -> i32 {
